@@ -1,0 +1,5 @@
+camera-capture-1.0-SNAPSHOT.jar filter=lfs diff=lfs merge=lfs -text
+haarcascade_frontalface_alt.xml filter=lfs diff=lfs merge=lfs -text
+使用说明.md filter=lfs diff=lfs merge=lfs -text
+camera[[:space:]]-[[:space:]]capture[[:space:]]-[[:space:]]1.0[[:space:]]-[[:space:]]SNAPSHOT.jar filter=lfs diff=lfs merge=lfs -text
+*.jar filter=lfs diff=lfs merge=lfs -text
