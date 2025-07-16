@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  人脸数据的MyBatis映射XML
+  包含face_data表的SQL语句和resultMap映射
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.demo.mapper.FaceDataMapper">
+
+    <!-- 基本结果映射 -->
+    <resultMap id="faceDataResultMap" type="com.example.demo.entity.FaceData">
+        <result property="featureData" column="feature_data" jdbcType="BLOB"/>
+        <result property="imagePath" column="image_path"/>
+        <result property="qualityScore" column="quality_score"/>
+        <result property="version" column="version"/>
+        <result property="registerTime" column="register_time"/>
+
+        <!-- 关联人员信息 -->
+        <association property="person" column="person_id"
+                     select="com.example.demo.mapper.PersonMapper.getPersonById"
+                     fetchType="lazy"/>
+    </resultMap>
+
+    <!-- 根据特征版本查询 -->
+    <select id="selectByVersion" resultMap="faceDataResultMap">
+        SELECT * FROM face_data
+        WHERE version = #{version}
+        ORDER BY quality_score DESC
+    </select>
+
+    <!-- 批量插入 -->
+    <insert id="batchInsert" parameterType="list">
+        INSERT INTO face_data(person_id, feature_data, image_path, quality_score, version)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.person.id}, #{item.featureData}, #{item.imagePath},
+            #{item.qualityScore}, #{item.version})
+        </foreach>
+    </insert>
+
+    <insert id="insert" parameterType="com.example.demo.entity.FaceData">
+        INSERT INTO face_data(person_id, feature_data, image_path, quality_score, version, register_time)
+        VALUES (#{person.id}, #{featureData}, #{imagePath}, #{qualityScore}, #{version}, #{registerTime})
+    </insert>
+
+    <!-- 根据质量分数范围查询 -->
+    <select id="selectByQualityScoreRange" resultMap="faceDataResultMap">
+        SELECT * FROM face_data
+        WHERE quality_score BETWEEN #{minScore} AND #{maxScore}
+        ORDER BY quality_score DESC
+    </select>
+
+    <!-- 条件查询 -->
+    <select id="selectByCondition" parameterType="map" resultMap="faceDataResultMap">
+        SELECT * FROM face_data
+        <where>
+            <if test="personId != null">
+                AND person_id = #{person.id}
+            </if>
+            <if test="version != null and version != ''">
+                AND version = #{version}
+            </if>
+            <if test="minQuality != null">
+                AND quality_score >= #{minQuality}
+            </if>
+            <if test="maxQuality != null">
+                AND quality_score &lt;= #{maxQuality}
+            </if>
+        </where>
+        ORDER BY register_time DESC
+    </select>
+
+</mapper>

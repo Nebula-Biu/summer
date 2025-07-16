@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>人脸接口测试（摄像头实时预览）</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        button { margin: 10px 0; padding: 10px 20px; font-size: 16px; }
+        #result { margin-top: 20px; white-space: pre-wrap; background: #f5f5f5; padding: 10px; border-radius: 5px; }
+        input { padding: 5px; font-size: 16px; }
+        #videoBox { position: relative; display: inline-block; }
+        #overlay { position: absolute; left: 0; top: 0; }
+    </style>
+    <!-- 引入 face-api.js CDN，必须在自定义 JS 之前 -->
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+</head>
+<body>
+    <div style="position: absolute; top: 20px; right: 40px;">
+        <button onclick="logout()" style="background:#d32f2f;color:#fff;padding:6px 18px;border:none;border-radius:4px;font-size:15px;cursor:pointer;">退出登录</button>
+    </div>
+    <h2>人脸接口测试（摄像头实时预览）</h2>
+    <div>
+        <!-- 登录表单已移除 -->
+    </div>
+    <div>
+        <!-- <label>用户ID：</label>
+        <input type="text" id="userId" placeholder="请输入用户ID" value="testuser" /> -->
+        <label>姓名：</label>
+        <input type="text" id="name" placeholder="请输入姓名" onblur="validateName()" oninput="clearNameTip()" />
+        <span id="nameTip" style="color:red;margin-left:8px;"></span>
+        <label>性别：</label>
+        <select id="gender">
+            <option value="1">男</option>
+            <option value="0">女</option>
+            <option value="2">其他</option>
+        </select>
+        <label>身份证号：</label>
+        <input type="text" id="id_card" placeholder="请输入身份证号" onblur="validateIdCard()" oninput="clearIdCardTip()" />
+        <span id="idCardTip" style="color:red;margin-left:8px;"></span>
+        <label>手机号：</label>
+        <input type="text" id="phone" placeholder="请输入手机号" onblur="validatePhone()" oninput="clearPhoneTip()" />
+        <span id="phoneTip" style="color:red;margin-left:8px;"></span>
+        <label>身份/职位：</label>
+        <input type="text" id="position" placeholder="请输入身份/职位" onblur="validatePosition()" oninput="clearPositionTip()" />
+        <span id="positionTip" style="color:red;margin-left:8px;"></span>
+        <label>状态：</label>
+        <select id="status">
+            <option value="1">可通行</option>
+            <option value="0">禁止</option>
+        </select>
+        <button onclick="startCamera()">打开摄像头</button>
+        <button id="captureBtn" onclick="captureAndRegister()" disabled>拍照并注册</button>
+        <button id="realtimeBtn" onclick="toggleRealtimeRecognize()">实时识别</button>
+    </div>
+    <div id="videoBox">
+        <video id="video" width="480" height="360" autoplay muted style="background:#000;"></video>
+        <canvas id="overlay" width="480" height="360"></canvas>
+    </div>
+    <div id="result"></div>
+    <!-- 将自定义 JS 放在 body 最后，确保 faceapi 已加载，不加 defer -->
+    <script>
+        // 登录校验已移除
+        let video = document.getElementById('video');
+        let overlay = document.getElementById('overlay');
+        let captureBtn = document.getElementById('captureBtn');
+        let realtimeBtn = document.getElementById('realtimeBtn');
+        let faceDetected = false;
+        let stream = null;
+        let realtimeInterval = null;
+        let isRealtime = false;
+
+        // 登录逻辑已移除
+
+        async function startCamera() {
+            // 只保留摄像头和人脸检测相关内容
+            document.getElementById('result').innerText = '正在加载摄像头和人脸检测模型...';
+            console.log('[调试] 尝试打开摄像头...');
+            if (!stream) {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                console.log('[调试] 摄像头已打开');
+            }
+            await faceapi.nets.tinyFaceDetector.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+            console.log('[调试] face-api.js 模型已加载');
+            document.getElementById('result').innerText = '摄像头已打开，正在检测人脸...';
+            detectFaceLoop();
+        }
+
+        async function detectFaceLoop() {
+            const displaySize = { width: video.width, height: video.height };
+            faceapi.matchDimensions(overlay, displaySize);
+            setInterval(async () => {
+                const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
+                const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                const ctx = overlay.getContext('2d');
+                ctx.clearRect(0, 0, overlay.width, overlay.height);
+                if (resizedDetections.length > 0) {
+                    faceDetected = true;
+                    captureBtn.disabled = false;
+                    ctx.strokeStyle = 'lime';
+                    ctx.lineWidth = 3;
+                    resizedDetections.forEach(det => {
+                        const { x, y, width, height } = det.box;
+                        ctx.strokeRect(x, y, width, height);
+                    });
+                    console.log('[调试] 检测到人脸', resizedDetections);
+                } else {
+                    faceDetected = false;
+                    captureBtn.disabled = true;
+                }
+            }, 200);
+        }
+
+        async function checkNameExists(name) {
+            try {
+                const res = await fetch(`/api/person/checkName?name=${encodeURIComponent(name)}`);
+                const data = await res.json();
+                return data.exists;
+            } catch {
+                return false;
+            }
+        }
+        async function checkIdCardExists(id_card) {
+            try {
+                const res = await fetch(`/api/person/checkIdCard?id_card=${encodeURIComponent(id_card)}`);
+                const data = await res.json();
+                return data.exists;
+            } catch {
+                return false;
+            }
+        }
+        function isPureNumber(str, len) {
+            return new RegExp(`^\\d{1,${len}}$`).test(str);
+        }
+        async function captureAndRegister() {
+            if (!faceDetected) {
+                alert('未检测到人脸，无法拍照！');
+                return;
+            }
+            if (captureBtn.disabled) {
+                alert('请勿重复注册');
+                return;
+            }
+            captureBtn.disabled = true;
+            const name = document.getElementById('name').value.trim();
+            const gender = document.getElementById('gender').value;
+            const id_card = document.getElementById('id_card').value.trim();
+            const phone = document.getElementById('phone').value.trim();
+            const position = document.getElementById('position').value.trim();
+            const status = document.getElementById('status').value;
+            // 只保留拍照和注册逻辑
+            let canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+            let dataUrl = canvas.toDataURL('image/jpeg');
+            document.getElementById('result').innerText = '正在上传注册...';
+            fetch('/api/person', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + (localStorage.getItem('token') || '')
+                },
+                body: JSON.stringify({ name, gender, id_card, phone, position, status, image: dataUrl })
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('result').innerText = JSON.stringify(data, null, 2);
+                captureBtn.disabled = false;
+            })
+            .catch(err => {
+                document.getElementById('result').innerText = '请求失败：' + err;
+                captureBtn.disabled = false;
+            });
+        }
+
+        function toggleRealtimeRecognize() {
+            if (!isRealtime) {
+                isRealtime = true;
+                realtimeBtn.innerText = '停止识别';
+                document.getElementById('result').innerText = '实时识别中...';
+                console.log('[调试] 开始实时识别');
+                realtimeInterval = setInterval(realtimeRecognize, 1000);
+            } else {
+                isRealtime = false;
+                realtimeBtn.innerText = '实时识别';
+                clearInterval(realtimeInterval);
+                document.getElementById('result').innerText = '';
+                console.log('[调试] 停止实时识别');
+            }
+        }
+
+        function realtimeRecognize() {
+            // 抓取当前帧
+            let canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+            let dataUrl = canvas.toDataURL('image/jpeg');
+            console.log('[调试] 实时识别 base64 长度:', dataUrl.length);
+            fetch('/api/realtimeRecognizeByImage', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + (localStorage.getItem('token') || '')
+                },
+                body: JSON.stringify({ image: dataUrl })
+            })
+            .then(res => res.json())
+            .then(data => {
+                console.log('[调试] 实时识别接口返回:', data);
+                if (data.result && data.result.name) {
+                    document.getElementById('result').innerText = '识别到：' + data.result.name + (data.result.score ? ('（分数：' + data.result.score + '）') : '');
+                } else if (data.result && data.result.personId) {
+                    document.getElementById('result').innerText = '识别到ID：' + data.result.personId;
+                } else {
+                    document.getElementById('result').innerText = JSON.stringify(data, null, 2);
+                }
+            })
+            .catch(err => {
+                console.error('[调试] 实时识别请求失败:', err);
+                document.getElementById('result').innerText = '识别请求失败：' + err;
+            });
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            window.location.href = '/Login.html';
+        }
+
+        // 新增：输入校验和查重提示逻辑
+        async function validateName() {
+            const name = document.getElementById('name').value.trim();
+            const tip = document.getElementById('nameTip');
+            if (!name) {
+                tip.innerText = '姓名不能为空';
+                return false;
+            }
+            const exists = await checkNameExists(name);
+            if (exists) {
+                tip.innerText = '该姓名已存在，请更换';
+                return false;
+            }
+            tip.innerText = '';
+            return true;
+        }
+        function clearNameTip() {
+            document.getElementById('nameTip').innerText = '';
+        }
+        async function validateIdCard() {
+            const id_card = document.getElementById('id_card').value.trim();
+            const tip = document.getElementById('idCardTip');
+            if (!/^\d{18}$/.test(id_card)) {
+                tip.innerText = '身份证号必须为18位纯数字';
+                return false;
+            }
+            const exists = await checkIdCardExists(id_card);
+            if (exists) {
+                tip.innerText = '该身份证号已存在，请勿重复注册';
+                return false;
+            }
+            tip.innerText = '';
+            return true;
+        }
+        function clearIdCardTip() {
+            document.getElementById('idCardTip').innerText = '';
+        }
+        function validatePhone() {
+            const phone = document.getElementById('phone').value.trim();
+            const tip = document.getElementById('phoneTip');
+            if (phone && !/^\d{1,20}$/.test(phone)) {
+                tip.innerText = '手机号必须为小于等于20位的纯数字';
+                return false;
+            }
+            tip.innerText = '';
+            return true;
+        }
+        function clearPhoneTip() {
+            document.getElementById('phoneTip').innerText = '';
+        }
+        function validatePosition() {
+            const position = document.getElementById('position').value.trim();
+            const tip = document.getElementById('positionTip');
+            if (position.length > 50) {
+                tip.innerText = '身份/职位不能超过50个字符';
+                return false;
+            }
+            tip.innerText = '';
+            return true;
+        }
+        function clearPositionTip() {
+            document.getElementById('positionTip').innerText = '';
+        }
+    </script>
+</body>
+</html> 

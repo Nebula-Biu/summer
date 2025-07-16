@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  通行记录的MyBatis映射XML
+  包含access_log表的SQL语句和resultMap映射
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.demo.mapper.AccessLogMapper">
+
+    <resultMap id="accessLogResultMap" type="com.example.demo.entity.AccessLog">
+        <id property="id" column="id"/>
+        <result property="personId" column="person_id"/>
+        <result property="accessTime" column="access_time"/>
+        <result property="accessType" column="access_type"/>
+        <result property="result" column="result"/>
+        <result property="temperature" column="temperature"/>
+        <result property="confidence" column="confidence"/>
+        <result property="captureImage" column="capture_image"/>
+
+        <!-- 关联人员信息 -->
+        <association property="person" column="person_id"
+                     select="com.example.demo.mapper.PersonMapper.getPersonById"
+                     fetchType="lazy"/>
+
+        <!-- 关联设备信息 -->
+        <association property="device" column="device_id"
+                     select="com.example.demo.mapper.AccessDeviceMapper.selectById"
+                     fetchType="lazy"/>
+    </resultMap>
+
+    <!-- 批量插入 -->
+    <insert id="batchInsert" parameterType="list">
+        INSERT INTO access_log(
+        person_id, access_time, access_type, result,
+        temperature, confidence, capture_image, device_id
+        ) VALUES
+        <foreach collection="list" item="log" separator=",">
+            (#{log.personId}, #{log.accessTime}, #{log.accessType}, #{log.result},
+            #{log.temperature}, #{log.confidence}, #{log.captureImage}, #{log.deviceId})
+        </foreach>
+    </insert>
+
+    <!-- 根据设备ID查询 -->
+    <select id="selectByDeviceId" resultMap="accessLogResultMap">
+        SELECT * FROM access_log
+        WHERE device_id = #{deviceId}
+        ORDER BY access_time DESC
+            LIMIT #{limit}
+    </select>
+
+    <!-- 按时间范围查询 -->
+    <select id="selectByTimeRange" resultMap="accessLogResultMap">
+        SELECT * FROM access_log
+        WHERE access_time BETWEEN #{startTime} AND #{endTime}
+        ORDER BY access_time DESC
+    </select>
+
+    <!-- 统计各设备通行次数 -->
+    <select id="countByDevice" resultType="map">
+        SELECT
+            device_id as deviceId,
+            COUNT(*) as accessCount,
+            SUM(CASE WHEN result = 1 THEN 1 ELSE 0 END) as successCount
+        FROM access_log
+        WHERE access_time BETWEEN #{startTime} AND #{endTime}
+        GROUP BY device_id
+    </select>
+
+    <!-- 条件查询 -->
+    <select id="selectByCondition" parameterType="map" resultMap="accessLogResultMap">
+        SELECT * FROM access_log
+        <where>
+            <if test="personId != null">
+                AND person_id = #{personId}
+            </if>
+            <if test="deviceId != null and deviceId != ''">
+                AND device_id = #{deviceId}
+            </if>
+            <if test="result != null">
+                AND result = #{result}
+            </if>
+            <if test="minConfidence != null">
+                AND confidence >= #{minConfidence}
+            </if>
+            <if test="startTime != null">
+                AND access_time >= #{startTime}
+            </if>
+            <if test="endTime != null">
+                AND access_time &lt;= #{endTime}
+            </if>
+        </where>
+        ORDER BY access_time DESC
+        <if test="limit != null">
+            LIMIT #{limit}
+        </if>
+    </select>
+</mapper>

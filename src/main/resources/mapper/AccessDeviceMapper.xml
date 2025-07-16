@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  门禁设备的MyBatis映射XML
+  包含access_device表的SQL语句和resultMap映射
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.demo.mapper.AccessDeviceMapper">
+
+    <resultMap id="accessDeviceResultMap" type="com.example.demo.entity.AccessDevice">
+        <id property="deviceId" column="device_id"/>
+        <result property="deviceName" column="device_name"/>
+        <result property="deviceType" column="device_type"/>
+        <result property="location" column="location"/>
+        <result property="status" column="status"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+
+        <!-- 关联通行记录 -->
+        <collection property="accessLogs" column="device_id"
+                    select="com.example.demo.mapper.AccessLogMapper.selectByDeviceId"
+                    fetchType="lazy"/>
+    </resultMap>
+
+    <!-- 条件查询 -->
+    <select id="selectByCondition" resultMap="accessDeviceResultMap">
+        SELECT * FROM access_device
+        <where>
+            <if test="params.deviceName != null and params.deviceName != ''">
+                AND device_name LIKE CONCAT('%', #{params.deviceName}, '%')
+            </if>
+            <if test="params.deviceType != null">
+                AND device_type = #{params.deviceType}
+            </if>
+            <if test="params.status != null">
+                AND status = #{params.status}
+            </if>
+            <if test="params.location != null and params.location != ''">
+                AND location LIKE CONCAT('%', #{params.location}, '%')
+            </if>
+        </where>
+        ORDER BY ${params.orderBy ?? 'create_time DESC'}
+        <if test="params.limit != null">
+            LIMIT #{params.limit}
+        </if>
+    </select>
+
+    <!-- 批量更新状态 -->
+    <update id="batchUpdateStatus">
+        UPDATE access_device
+        SET status = #{status},
+        update_time = NOW()
+        WHERE device_id IN
+        <foreach collection="deviceIds" item="deviceId" open="(" separator="," close=")">
+            #{deviceId}
+        </foreach>
+    </update>
+
+</mapper>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.demo.mapper.PersonMapper">
+
+    <!-- 基本结果映射 -->
+    <resultMap id="personResultMap" type="com.example.demo.entity.Person">
+        <id property="id" column="id"/>
+        <result property="name" column="name"/>
+        <!-- 一对一关联详情 -->
+        <association property="detail" column="id"
+                     select="com.example.demo.mapper.PersonDetailMapper.selectByPersonId"
+                     fetchType="lazy"/>
+    </resultMap>
+
+    <!-- 根据姓名模糊查询 -->
+    <select id="getPersonsByName" resultMap="personResultMap">
+        SELECT * FROM person
+        WHERE name LIKE CONCAT('%', #{name}, '%')
+        ORDER BY id DESC
+    </select>
+
+    <!-- 批量插入示例 -->
+    <insert id="batchInsert" parameterType="list">
+        INSERT INTO person(id, name) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.id}, #{item.name})
+        </foreach>
+    </insert>
+
+    <!-- 条件查询 -->
+    <select id="selectByCondition" parameterType="map" resultMap="personResultMap">
+        SELECT * FROM person
+        <where>
+            <if test="name != null and name != ''">
+                AND name LIKE CONCAT('%', #{name}, '%')
+            </if>
+            <if test="id != null">
+                AND id = #{id}
+            </if>
+        </where>
+        ORDER BY id DESC
+    </select>
+</mapper>
